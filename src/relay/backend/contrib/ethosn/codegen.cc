@@ -83,7 +83,7 @@ void InferTensorsVisitor::InferCall(const CallNode* cn) {
   if (IsEthosnFunc(call, "ethos-n.qnn_conv2d")) {
     ConvolutionParams params;
     err += EthosnAPI::QnnConv2d(cn->op.as<FunctionNode>()->body, &params);
-    tensor_table_[cn->args[0]] = {params.activation_info};
+    tensor_table_[cn->args[0]] = {params.input_info};
   } else if (IsEthosnFunc(call, "ethos-n.qnn_fc")) {
     FullyConnectedParams params;
     err += EthosnAPI::QnnFullyConnected(cn->op.as<FunctionNode>()->body, &params);
@@ -662,8 +662,6 @@ sl::CompilationOptions EthosnCompiler::CreateOptions() {
   options.m_EnableIntermediateCompression = cfg.value()->enable_intermediate_compression;
   options.m_DisableWinograd = cfg.value()->disable_winograd;
   options.m_DebugInfo.m_DebugDir = cfg.value()->debug_dir;
-  options.m_CompilerAlgorithm =
-      sl::EthosNCompilerAlgorithmFromString(cfg.value()->compiler_algorithm.c_str());
   return options;
 }
 
@@ -714,11 +712,11 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.conv2d")
       if (params.is_depthwise) {
         *rv = !err && EthosnCompiler::GetSupported()->IsDepthwiseConvolutionSupported(
                           params.bias_info, params.weights_info, params.conv_info,
-                          params.activation_info, nullptr, reason, sizeof(reason));
+                          params.input_info, &params.output_info, reason, sizeof(reason));
       } else {
         *rv = !err && EthosnCompiler::GetSupported()->IsConvolutionSupported(
                           params.bias_info, params.weights_info, params.conv_info,
-                          params.activation_info, nullptr, reason, sizeof(reason));
+                          params.input_info, &params.output_info, reason, sizeof(reason));
       }
       err += EthosnError(reason);
     });
@@ -733,7 +731,7 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.fc")
       reason[0] = '\0';
       *rv = !err && EthosnCompiler::GetSupported()->IsFullyConnectedSupported(
                         params.bias_info, params.weights_info, params.fc_info, params.input_info,
-                        nullptr, reason, sizeof(reason));
+                        &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -745,8 +743,9 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.max_pool2d")
       err += EthosnCompiler::SupportedSetup();
       char reason[kReasonMaxLength];
       reason[0] = '\0';
-      *rv = !err && EthosnCompiler::GetSupported()->IsPoolingSupported(
-                        params.pool_info, params.input_info, nullptr, reason, sizeof(reason));
+      *rv = !err &&
+            EthosnCompiler::GetSupported()->IsPoolingSupported(
+                params.pool_info, params.input_info, &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -758,8 +757,9 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.avg_pool2d")
       err += EthosnCompiler::SupportedSetup();
       char reason[kReasonMaxLength];
       reason[0] = '\0';
-      *rv = !err && EthosnCompiler::GetSupported()->IsPoolingSupported(
-                        params.pool_info, params.input_info, nullptr, reason, sizeof(reason));
+      *rv = !err &&
+            EthosnCompiler::GetSupported()->IsPoolingSupported(
+                params.pool_info, params.input_info, &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -772,8 +772,9 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.reshape")
       err += EthosnCompiler::SupportedSetup();
       char reason[kReasonMaxLength];
       reason[0] = '\0';
-      *rv = !err && EthosnCompiler::GetSupported()->IsReshapeSupported(
-                        params.new_shape, params.input_info, nullptr, reason, sizeof(reason));
+      *rv = !err &&
+            EthosnCompiler::GetSupported()->IsReshapeSupported(
+                params.new_shape, params.input_info, &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -786,8 +787,8 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.addition")
       char reason[kReasonMaxLength];
       reason[0] = '\0';
       *rv = !err && EthosnCompiler::GetSupported()->IsAdditionSupported(
-                        params.lhs_info, params.rhs_info, params.output_quantization_info, nullptr,
-                        reason, sizeof(reason));
+                        params.lhs_info, params.rhs_info, params.output_quantization_info,
+                        &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -799,8 +800,8 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.sigmoid")
       err += EthosnCompiler::SupportedSetup();
       char reason[kReasonMaxLength];
       reason[0] = '\0';
-      *rv = !err && EthosnCompiler::GetSupported()->IsSigmoidSupported(params.input_info, nullptr,
-                                                                       reason, sizeof(reason));
+      *rv = !err && EthosnCompiler::GetSupported()->IsSigmoidSupported(
+                        params.input_info, &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -812,8 +813,8 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.mean")
       err += EthosnCompiler::SupportedSetup();
       char reason[kReasonMaxLength];
       reason[0] = '\0';
-      *rv = !err && EthosnCompiler::GetSupported()->IsMeanXySupported(params.input_info, nullptr,
-                                                                      reason, sizeof(reason));
+      *rv = !err && EthosnCompiler::GetSupported()->IsMeanXySupported(
+                        params.input_info, &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -825,8 +826,8 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.tanh")
       err += EthosnCompiler::SupportedSetup();
       char reason[kReasonMaxLength];
       reason[0] = '\0';
-      *rv = !err && EthosnCompiler::GetSupported()->IsTanhSupported(params.input_info, nullptr,
-                                                                    reason, sizeof(reason));
+      *rv = !err && EthosnCompiler::GetSupported()->IsTanhSupported(
+                        params.input_info, &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -839,7 +840,8 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.leaky_relu")
       char reason[kReasonMaxLength];
       reason[0] = '\0';
       *rv = !err && EthosnCompiler::GetSupported()->IsLeakyReluSupported(
-                        params.leaky_relu_info, params.input_info, nullptr, reason, sizeof(reason));
+                        params.leaky_relu_info, params.input_info, &params.output_info, reason,
+                        sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -852,7 +854,8 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.concatenate")
       char reason[kReasonMaxLength];
       reason[0] = '\0';
       *rv = !err && EthosnCompiler::GetSupported()->IsConcatenationSupported(
-                        params.input_infos, params.concat_info, nullptr, reason, sizeof(reason));
+                        params.input_infos, params.concat_info, &params.output_info, reason,
+                        sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -878,8 +881,9 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.depth_to_space")
       err += EthosnCompiler::SupportedSetup();
       char reason[kReasonMaxLength];
       reason[0] = '\0';
-      *rv = !err && EthosnCompiler::GetSupported()->IsDepthToSpaceSupported(
-                        params.input_info, params.depth_info, nullptr, reason, sizeof(reason));
+      *rv = !err &&
+            EthosnCompiler::GetSupported()->IsDepthToSpaceSupported(
+                params.input_info, params.depth_info, &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 
@@ -891,8 +895,9 @@ TVM_REGISTER_GLOBAL("relay.ethos-n.support.relu")
       err += EthosnCompiler::SupportedSetup();
       char reason[kReasonMaxLength];
       reason[0] = '\0';
-      *rv = !err && EthosnCompiler::GetSupported()->IsReluSupported(
-                        params.relu_info, params.input_info, nullptr, reason, sizeof(reason));
+      *rv = !err &&
+            EthosnCompiler::GetSupported()->IsReluSupported(
+                params.relu_info, params.input_info, &params.output_info, reason, sizeof(reason));
       err += EthosnError(reason);
     });
 

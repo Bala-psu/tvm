@@ -364,10 +364,13 @@ def relu(expr, type_map):
 def leaky_relu(expr, type_map):
     """Rewrite a leaky relu op"""
     arg = expr.args[0]
-    t = type_map[arg]
+    x_t = type_map[arg]
+    out_t = type_map[expr]
     alpha = expr.attrs.alpha
-    output = relay.qnn.op.leaky_relu(expr, alpha, t.scale, t.zero_point)
-    return [output, t]
+    output = relay.qnn.op.leaky_relu(
+        expr, alpha, x_t.scale, x_t.zero_point, out_t.scale, out_t.zero_point
+    )
+    return [output, x_t]
 
 
 @register_fake_quantization_to_integer("nn.pad")
@@ -435,14 +438,12 @@ def get_binary_types(expr, type_map):
             left, right_t.scale, right_t.zero_point, out_dtype=right_t.dtype
         )
         left_t = right_t
-        out_t = right_t
     if right_t is None:
         assert isinstance(right, relay.expr.Constant)
         right = relay.qnn.op.quantize(
             right, left_t.scale, left_t.zero_point, out_dtype=left_t.dtype
         )
         right_t = left_t
-        out_t = left_t
 
     # Handle the case of mismatched inputs
     if not left_t.dtype == out_t.dtype:
@@ -531,7 +532,7 @@ def register_unary_qnn(op_name, op):
             out_t.scale,
             out_t.zero_point,
         )
-        return [out, x_t]
+        return [out, out_t]
 
     return register_fake_quantization_to_integer(op_name, unary)
 
